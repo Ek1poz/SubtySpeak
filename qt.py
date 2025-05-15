@@ -1,4 +1,6 @@
 import sys
+import subprocess
+from kernel_of_project import start_translation
 import string
 import time
 import threading
@@ -75,7 +77,11 @@ class RecordingsWindow(QWidget):  # вікно для записів
             print(f"Відкрити запис: {record_name}")
         else:
             print("Не обрано жодного запису.")
-class SpellweaverApp(QWidget):  # головне вікно
+class SpellweaverApp(QWidget): # головне вікно
+
+    def run_worker_script(self):
+        start_translation()
+
     def __init__(self):
         super().__init__()
         self.dialog_window = DialogWindow()
@@ -127,7 +133,8 @@ class SpellweaverApp(QWidget):  # головне вікно
                                                 background-color: #777777;
                                             }
                                         """)
-        #self.STARTbutton.clicked.connect(speech_translator.run_translator)
+        self.STARTbutton.clicked.connect(self.run_worker_script)
+
         # лейбли(з цими надписами нічого робити не треба)
         self.label = QLabel("Language choice", self)
         self.label.setFont(QFont("comicsans", 12, QFont.Bold))
