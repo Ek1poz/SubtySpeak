@@ -22,6 +22,7 @@ class DialogWindow(QWidget):  # вікно з текстом
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
         self.text_edit.setStyleSheet("background-color: #D8C99B; color: black;")
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
 
         font = QFont()
         font.setPointSize(12)
@@ -33,6 +34,20 @@ class DialogWindow(QWidget):  # вікно з текстом
 
     def add_text(self, text):
         self.text_edit.append(text)
+        #вся ця частина відповідає за рухомість вікна (тут нічого цікавого)
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._old_pos = event.globalPos()
+
+    def mouseMoveEvent(self, event):
+        if self._old_pos is not None:
+            delta = event.globalPos() - self._old_pos
+            self.move(self.x() + delta.x(), self.y() + delta.y())
+            self._old_pos = event.globalPos()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._old_pos = None    
 
                #  вікно зі збереженнями
 class RecordingsWindow(QWidget):  # вікно для записів
