@@ -1,15 +1,13 @@
 import sys
-import subprocess
 from kernel_of_project import start_translation
-import string
 import time
 import threading
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QListWidget, QListWidgetItem, QLabel, QPushButton, QComboBox, QVBoxLayout,
     QTextEdit, QCheckBox
 )
-from PyQt5.QtGui import QFont, QIcon, QCloseEvent
-from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont, QCloseEvent
+from PyQt5.QtCore import Qt, pyqtSignal, QObject
                 # діалогове вікно з субтитрами
 class DialogWindow(QWidget):  # вікно з текстом
     def __init__(self):
@@ -79,17 +77,37 @@ class RecordingsWindow(QWidget):  # вікно для записів
             print("Не обрано жодного запису.")
 class SpellweaverApp(QWidget): # головне вікно
 
+    def set_subtitle_text(self, text):
+        if self.subtitle_label:
+            self.subtitle_label.setText(text)
+
     def run_worker_script(self):
-        start_translation()
+        if not self.translating:
+            self.stop_event.clear()
+            callback_func = lambda text: self.subtitle_handler.new_text.emit(text)
+            self.translation_thread = threading.Thread(target=start_translation, args=(self.stop_event, callback_func))
+            self.translation_thread.start()
+            self.STARTbutton.setText("■")
+            self.translating = True
+        else:
+            self.stop_event.set()
+            self.translation_thread.join(timeout=2)
+            self.STARTbutton.setText("▶")
+            self.translating = False
 
     def __init__(self):
         super().__init__()
+        self.translation_thread = None
+        self.stop_event = threading.Event()
+        self.translating = False
         self.dialog_window = DialogWindow()
         self.recordings_window = RecordingsWindow()
         self.dialog_window_visible = False
         self.recordings_window_visible = False
         self.init_ui()
 
+        self.subtitle_handler = SubtitleHandler()
+        self.subtitle_handler.new_text.connect(self.set_subtitle_text)
 
         self.subtitle_window = None
         self.subtitle_label = None
@@ -115,7 +133,7 @@ class SpellweaverApp(QWidget): # головне вікно
         #          ====ЛЕМЕНТИ ВІКНА====
 
         # Кнопка запуску перекладу
-        self.STARTbutton = QPushButton("0", self)
+        self.STARTbutton = QPushButton("▶", self)
         self.STARTbutton.move(220, 550)
         self.STARTbutton.setStyleSheet("""
                                             QPushButton {
@@ -372,11 +390,13 @@ class SpellweaverApp(QWidget): # головне вікно
         while True:
             time.sleep(3)
             if self.subtitle_label:
-                self.subtitle_label.setText("Це нові субтитри...")
+                self.subtitle_label.setText()
             time.sleep(3)
             if self.subtitle_label:
                 self.subtitle_label.setText("І ще один приклад...")
 
+class SubtitleHandler(QObject):
+    new_text = pyqtSignal(str)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

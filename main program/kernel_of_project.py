@@ -10,8 +10,9 @@ import argostranslate.package
 import argostranslate.translate
 import warnings
 from soundcard.mediafoundation import SoundcardRuntimeWarning
+import os
 
-def start_translation():
+def start_translation(stop_event, callback=None):
 
     # Игнорування попередження від soundcard
     warnings.filterwarnings("ignore", category=SoundcardRuntimeWarning)
@@ -82,10 +83,10 @@ def start_translation():
     def loopback_stream():
         print("Слухаю системний звук...)")
         with loopback.recorder(samplerate=samplerate, channels=channels, blocksize=blocksize) as mic:
-            while True:
+            while not stop_event.is_set():
                 data = mic.record(numframes=blocksize)
                 data_bytes = (data * 32767).astype(np.int16).tobytes()
-                q.put(data_bytes) #переміщення у чергу q = queue.Queue()
+                q.put(data_bytes)
 
 # Запуск потоку захоплення звуку
     threading.Thread(target=loopback_stream, daemon=True).start()
@@ -93,20 +94,55 @@ def start_translation():
 
 #Головний поток
     try:
-        while True:
-            data = q.get()
+        while not stop_event.is_set():
+            try:
+                data = q.get(timeout=1)
+            except queue.Empty:
+                continue
+
+            if stop_event.is_set():
+                break
+
             if rec.AcceptWaveform(data):
-                #print(json.loads(rec.Result())["text"])
-                ##print(rec.Result())
-                print(argostranslate.translate.translate(rec.Result(), from_code, to_code))
+                # Готова фраза
+                result_json = json.loads(rec.Result())
+                recognized_text = result_json.get("text", "").strip()
+                if recognized_text:
+                    translated_text = argostranslate.translate.translate(recognized_text, from_code, to_code)
+
+                    # Вивід у консоль — два рядки
+                    print(f"\nEN: {recognized_text}")
+                    print(f"UK: {translated_text}\n")
+
+                    if callback: # for subtitles
+                        callback(translated_text)
+
+                    #Запис у файл — два рядки з порожнім рядком після
+                    with open("output/en_output.txt", "a", encoding="utf-8") as f:
+                        f.write(f" {recognized_text}\n")
+                        f.flush()
+
+                    with open("output/uk_output.txt", "a", encoding="utf-8") as f:
+                        f.write(f" {translated_text}\n")
+                        f.flush()
+
+
+
 
             else:
                 partial_text = json.loads(rec.PartialResult())["partial"]
-                sys.stdout.write('\r' + partial_text + ' ' * 20)
+                partial_translate = argostranslate.translate.translate(partial_text, from_code, to_code)
+                sys.stdout.write('\r' + partial_translate + ' ' * 20)
                 sys.stdout.flush()
+
+                if callback:
+                    callback(partial_translate)
 
                 #print(rec.PartialResult())
                 #print(argostranslate.translate.translate(json.loads(rec.PartialResult())["partial"], from_code, to_code))
     except KeyboardInterrupt:
-        print("\nГотово")
+        print("✅ Готово! Усе збережено в output.txt")
         sys.exit(0)
+
+
+
