@@ -10,7 +10,10 @@ import argostranslate.package
 import argostranslate.translate
 import warnings
 from soundcard.mediafoundation import SoundcardRuntimeWarning
+from deepmultilingualpunctuation import PunctuationModel
 import os
+
+model_p = PunctuationModel()
 
 def start_translation(stop_event, callback=None):
 
@@ -108,7 +111,8 @@ def start_translation(stop_event, callback=None):
                 result_json = json.loads(rec.Result())
                 recognized_text = result_json.get("text", "").strip()
                 if recognized_text:
-                    translated_text = argostranslate.translate.translate(recognized_text, from_code, to_code)
+                    punctuated = model_p.restore_punctuation(recognized_text)
+                    translated_text = argostranslate.translate.translate(punctuated, from_code, to_code)
 
                     # Вивід у консоль — два рядки
                     print(f"\nEN: {recognized_text}")
@@ -131,12 +135,11 @@ def start_translation(stop_event, callback=None):
 
             else:
                 partial_text = json.loads(rec.PartialResult())["partial"]
-                partial_translate = argostranslate.translate.translate(partial_text, from_code, to_code)
-                sys.stdout.write('\r' + partial_translate + ' ' * 20)
+                sys.stdout.write('\r' + partial_text + ' ' * 20)
                 sys.stdout.flush()
 
                 if callback:
-                    callback(partial_translate)
+                    callback(partial_text)
 
                 #print(rec.PartialResult())
                 #print(argostranslate.translate.translate(json.loads(rec.PartialResult())["partial"], from_code, to_code))
