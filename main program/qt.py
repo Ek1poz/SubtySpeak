@@ -4,12 +4,24 @@ import time
 import threading
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QListWidget, QListWidgetItem, QLabel, QPushButton, QComboBox, QVBoxLayout,
-    QTextEdit, QCheckBox
+    QTextEdit, QCheckBox, QMessageBox, QInputDialog
 )
 from PyQt5.QtGui import QFont, QCloseEvent
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
-                # діалогове вікно з субтитрами
-class DialogWindow(QWidget):  # вікно з текстом
+import os
+
+# Словник для зіставлення назв мов у GUI до їх кодів (ArgoTranslate)
+LANGUAGE_CODES = {
+    'English': 'en',
+    'Українськa': 'uk',
+    'Polska': 'pl',
+    'Espanol': 'es',
+    '中国人': 'zh'
+}
+
+
+# діалогове вікно з субтитрами
+class DialogWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Dialog history")
@@ -30,9 +42,47 @@ class DialogWindow(QWidget):  # вікно з текстом
         layout.addWidget(self.text_edit)
         self.setLayout(layout)
 
+        # Видаліть або закоментуйте рядок, який завантажує текст
+        # self._load_text_from_file() # Цей рядок буде видалено
+
     def add_text(self, text):
         self.text_edit.append(text)
-        #вся ця частина відповідає за рухомість вікна (тут нічого цікавого)
+
+    def _save_text_to_file(self):
+        pass
+
+    def _load_text_from_file(self):
+        pass
+
+    def closeEvent(self, event: QCloseEvent):
+
+        super().closeEvent(event)
+
+    def add_text(self, text):
+        self.text_edit.append(text)
+
+    def _save_text_to_file(self):
+        os.makedirs("output", exist_ok=True)
+        try:
+            with open("output/dialog_history.txt", "w", encoding="utf-8") as f:
+                f.write(self.text_edit.toPlainText())
+            print("Історія діалогів збережена у output/dialog_history.txt")
+        except Exception as e:
+            print(f"Помилка при збереженні історії діалогів: {e}")
+
+    def _load_text_from_file(self):
+        try:
+            if os.path.exists("output/dialog_history.txt"):
+                with open("output/dialog_history.txt", "r", encoding="utf-8") as f:
+                    self.text_edit.setText(f.read())
+                print("Історія діалогів завантажена з output/dialog_history.txt")
+        except Exception as e:
+            print(f"Помилка при завантаженні історії діалогів: {e}")
+
+    def closeEvent(self, event: QCloseEvent):
+        self._save_text_to_file()
+        super().closeEvent(event)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self._old_pos = event.globalPos()
@@ -45,9 +95,9 @@ class DialogWindow(QWidget):  # вікно з текстом
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self._old_pos = None    
+            self._old_pos = None
 
-               #  вікно зі збереженнями
+
 class RecordingsWindow(QWidget):  # вікно для записів
     def __init__(self):
         super().__init__()
@@ -78,43 +128,104 @@ class RecordingsWindow(QWidget):  # вікно для записів
         layout.addWidget(self.open_selected_button)
         self.setLayout(layout)
 
+        self._load_recordings()
+
     def add_recording(self, record_name):
         item = QListWidgetItem(record_name)
         self.recordings_list.addItem(item)
+        self._save_recordings()
 
     def open_selected_recording(self):
         selected_item = self.recordings_list.currentItem()
         if selected_item:
             record_name = selected_item.text()
-            # Тут буде логіка для відкриття/відтворення обраного запису
-            print(f"Відкрити запис: {record_name}")
+            # Логіка для відкриття/відтворення обраного запису
+            file_path = os.path.join("output", record_name)
+            if os.path.exists(file_path):
+                try:
+                    # Відкриваємо файл у системному редакторі за замовчуванням
+                    os.startfile(file_path)
+                except Exception as e:
+                    QMessageBox.critical(self, "Помилка відкриття файлу", f"Не вдалося відкрити файл: {e}")
+            else:
+                QMessageBox.warning(self, "Файл не знайдено", f"Файл '{record_name}' не існує в папці 'output'.")
         else:
-            print("Не обрано жодного запису.")
-class SpellweaverApp(QWidget): # головне вікно
+            QMessageBox.information(self, "Нічого не вибрано", "Не обрано жодного запису для відкриття.")
 
+    def _save_recordings(self):
+        os.makedirs("output", exist_ok=True)
+        try:
+            with open("output/recordings_list.txt", "w", encoding="utf-8") as f:
+                for i in range(self.recordings_list.count()):
+                    f.write(self.recordings_list.item(i).text() + "\n")
+            print("Список записів збережено у output/recordings_list.txt")
+        except Exception as e:
+            print(f"Помилка при збереженні списку записів: {e}")
+
+    def _load_recordings(self):
+        try:
+            if os.path.exists("output/recordings_list.txt"):
+                with open("output/recordings_list.txt", "r", encoding="utf-8") as f:
+                    for line in f:
+                        self.recordings_list.addItem(line.strip())
+                print("Список записів завантажено з output/recordings_list.txt")
+        except Exception as e:
+            print(f"Помилка при завантаженні списку записів: {e}")
+
+
+class SpellweaverApp(QWidget):
     def set_subtitle_text(self, text):
         if self.subtitle_label:
             self.subtitle_label.setText(text)
+        # Додаємо текст до буфера, який буде збережено
+        self.current_session_translated_text += text + "\n"
 
     def run_worker_script(self):
         if not self.translating:
+            # Отримуємо вибрані мови з дропдаунів
+            selected_from_lang_name = self.language_dropdown.currentText()
+            selected_to_lang_name = self.language2_dropdown.currentText()
+
+            # Перетворюємо назви мов у коди
+            self.current_from_code = LANGUAGE_CODES.get(selected_from_lang_name)
+            self.current_to_code = LANGUAGE_CODES.get(selected_to_lang_name)
+
+            if not self.current_from_code or not self.current_to_code:
+                QMessageBox.warning(self, "Помилка вибору мови", "Будь ласка, виберіть дійсну мову для перекладу.")
+                return
+
+            print(f"Вибрано переклад з '{self.current_from_code}' на '{self.current_to_code}'")
+
+            # Очищаємо буфер для нової сесії
+            self.current_session_translated_text = ""
+
             self.stop_event.clear()
             callback_func = lambda text: self.subtitle_handler.new_text.emit(text)
-            self.translation_thread = threading.Thread(target=start_translation, args=(self.stop_event, callback_func))
+            self.translation_thread = threading.Thread(
+                target=start_translation,
+                args=(self.stop_event, self.current_from_code, self.current_to_code, callback_func)
+            )
             self.translation_thread.start()
             self.STARTbutton.setText("■")
             self.translating = True
         else:
             self.stop_event.set()
-            self.translation_thread.join(timeout=2)
+            if self.translation_thread and self.translation_thread.is_alive():
+                self.translation_thread.join(timeout=2)  # Чекаємо завершення потоку
             self.STARTbutton.setText("▶")
             self.translating = False
+            # Зберігаємо текст після зупинки
+            self.save_session_translation()
 
     def __init__(self):
         super().__init__()
         self.translation_thread = None
         self.stop_event = threading.Event()
         self.translating = False
+        self.current_session_translated_text = ""  # Змінна для зберігання тексту поточної сесії
+        self.current_from_code = ""  # Зберігаємо код вихідної мови для файлу
+        self.current_to_code = ""  # Зберігаємо код цільової мови для файлу
+
         self.dialog_window = DialogWindow()
         self.recordings_window = RecordingsWindow()
         self.dialog_window_visible = False
@@ -123,31 +234,64 @@ class SpellweaverApp(QWidget): # головне вікно
 
         self.subtitle_handler = SubtitleHandler()
         self.subtitle_handler.new_text.connect(self.set_subtitle_text)
+        self.subtitle_handler.new_text.connect(self.add_dialog_text)
 
         self.subtitle_window = None
         self.subtitle_label = None
         self.subtitle_thread_started = False
         self.record_btn = None
-    # це закриття всіх вікон якщо якривається головне вікно
-    # (якщо видалити то всі решта вікон будуть працювати і після закриття програми , навіть не знаю як краще)
-    def closeEvent(self, event: QCloseEvent):
-     """Обробник події закриття головного вікна."""
-     if self.dialog_window:
-        self.dialog_window.close()
-     if self.recordings_window:
-        self.recordings_window.close()
-     if self.subtitle_window:
-        self.subtitle_window.close()
-     event.accept()
 
-             # ===ВИГЛЯД САМОГО ВІКНА===
+    def save_session_translation(self):
+        """Зберігає зібраний текст поточної сесії у файл і додає запис до Recordings."""
+        if not self.current_session_translated_text.strip():
+            print("Немає тексту для збереження.")
+            return
+
+        # Запитуємо назву файлу у користувача
+        file_name, ok = QInputDialog.getText(self, "Зберегти переклад",
+                                             "Введіть назву для запису (без розширення .txt):")
+        if not ok or not file_name:
+            QMessageBox.warning(self, "Збереження скасовано", "Назву файлу не введено. Переклад не збережено.")
+            return
+
+        # Додаємо розширення .txt
+        full_file_name = f"{file_name}.txt"
+        file_path = os.path.join("output", full_file_name)
+
+        try:
+            os.makedirs("output", exist_ok=True)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(f"Переклад з {self.current_from_code.upper()} на {self.current_to_code.upper()}:\n\n")
+                f.write(self.current_session_translated_text)
+            print(f"Переклад сесії збережено у '{file_path}'")
+            self.recordings_window.add_recording(full_file_name)
+        except Exception as e:
+            QMessageBox.critical(self, "Помилка збереження", f"Не вдалося зберегти переклад: {e}")
+
+    def closeEvent(self, event: QCloseEvent):
+        """Обробник події закриття головного вікна."""
+        # Перед закриттям, перевіряємо, чи не потрібно зберегти поточну сесію
+        if self.translating:  # Якщо переклад все ще активний, то зупиняємо
+            self.stop_event.set()
+            if self.translation_thread and self.translation_thread.is_alive():
+                self.translation_thread.join(timeout=2)  # Чекаємо завершення потоку
+            # Можемо запропонувати зберегти тут, якщо переклад був запущений, але не зупинений вручну
+            # self.save_session_translation() # Якщо потрібно автоматичне збереження при закритті
+
+        # Закриваємо дочірні вікна
+        if self.dialog_window:
+            self.dialog_window.close()
+        if self.recordings_window:
+            self.recordings_window.close()  # closeEvent RecordingsWindow автоматично збереже список
+        if self.subtitle_window:
+            self.subtitle_window.close()
+        event.accept()
+
     def init_ui(self):
         self.setWindowTitle("Spellweaver")
         self.setFixedSize(520, 651)
         self.setStyleSheet("background-color: #0C1821;")
-        #          ====ЛЕМЕНТИ ВІКНА====
 
-        # Кнопка запуску перекладу
         self.STARTbutton = QPushButton("▶", self)
         self.STARTbutton.move(220, 550)
         self.STARTbutton.setStyleSheet("""
@@ -168,7 +312,6 @@ class SpellweaverApp(QWidget): # головне вікно
                                         """)
         self.STARTbutton.clicked.connect(self.run_worker_script)
 
-        # лейбли(з цими надписами нічого робити не треба)
         self.label = QLabel("Language choice", self)
         self.label.setFont(QFont("comicsans", 12, QFont.Bold))
         self.label.setStyleSheet("color: white;")
@@ -184,7 +327,6 @@ class SpellweaverApp(QWidget): # головне вікно
         self.labelcheck2.setStyleSheet("color: white;")
         self.labelcheck2.move(320, 450)
 
-          # чекбокси
         self.checkbox1 = QCheckBox(self)
         self.checkbox1.setChecked(False)
         self.checkbox1.setObjectName("hide on demo")
@@ -214,7 +356,6 @@ class SpellweaverApp(QWidget): # головне вікно
                         border-radius: 5px;
                     }
                 """)
-        # Кнопка субтитрів
         self.toggle_subtitles_btn = QPushButton("Subtitles", self)
         self.toggle_subtitles_btn.move(10, 400)
         self.toggle_subtitles_btn.setStyleSheet("""
@@ -236,9 +377,8 @@ class SpellweaverApp(QWidget): # головне вікно
                         """)
         self.toggle_subtitles_btn.clicked.connect(self.toggle_subtitle_window)
 
-        # Кнопка створення окремого вікна з текстом
         self.toggle_window_text_btn = QPushButton("Windowed text", self)
-        self.toggle_window_text_btn.move(10, 450)
+        self.toggle_window_text_btn.move(10, 470)
         self.toggle_window_text_btn.setStyleSheet("""
                     QPushButton {
                         background-color: #333333;
@@ -257,8 +397,8 @@ class SpellweaverApp(QWidget): # головне вікно
 
                 """)
         self.toggle_window_text_btn.clicked.connect(self.toggle_dialog_window)
-        # кнопка виклику вікна з записами
-        self.record_btn = QPushButton("recoedings", self)
+
+        self.record_btn = QPushButton("recordings", self)
         self.record_btn.move(10, 250)
         self.record_btn.setStyleSheet("""
                             QPushButton {
@@ -279,10 +419,9 @@ class SpellweaverApp(QWidget): # головне вікно
                         """)
         self.record_btn.clicked.connect(self.toggle_recordings_window)
 
-        # дропдаун бокси з виборами мов
-        languages = ['English', 'Українськa', 'Polska', 'Espanol', '中国人']
+        languages = sorted(list(LANGUAGE_CODES.keys()))
 
-        self.language_dropdown = QComboBox(self) # це бокс з вибором мови з якої перекладають
+        self.language_dropdown = QComboBox(self)
         self.language_dropdown.addItems(languages)
         self.language_dropdown.setFont(QFont("comicsans", 12, QFont.Bold))
         self.language_dropdown.setEditable(False)
@@ -310,8 +449,9 @@ class SpellweaverApp(QWidget): # головне вікно
                         background-color: #333333;
                     }
                 """)
+        self.language_dropdown.setCurrentText('English')
 
-        self.language2_dropdown = QComboBox(self) # це бокс в якому має бути вибір на яку мову перекладають
+        self.language2_dropdown = QComboBox(self)
         self.language2_dropdown.addItems(languages)
         self.language2_dropdown.setFont(QFont("comicsans", 12, QFont.Bold))
         self.language2_dropdown.setEditable(False)
@@ -339,7 +479,8 @@ class SpellweaverApp(QWidget): # головне вікно
                                 background-color: #333333;
                             }
                         """)
-     # це відповідає за сам показ вікна записів при натисканні кнопки
+        self.language2_dropdown.setCurrentText('Українськa')
+
     def toggle_recordings_window(self):
         if self.recordings_window_visible:
             self.recordings_window.hide()
@@ -348,7 +489,6 @@ class SpellweaverApp(QWidget): # головне вікно
             self.recordings_window.show()
             self.recordings_window_visible = True
 
-    # це відповідає за сам показ вікна з текстом при натисканні кнопки
     def toggle_dialog_window(self):
         if self.dialog_window_visible:
             self.dialog_window.hide()
@@ -356,23 +496,18 @@ class SpellweaverApp(QWidget): # головне вікно
         else:
             self.dialog_window.show()
             self.dialog_window_visible = True
-            self.test_dialog_text() # Викликаємо додавання тексту тут
-     # це все по суті тест того як має працювати отримання тексту
+
     def generate_random_text(self, length=10):
-        """Генерує простий тестовий рядок"""
         return "тест " * (length // 5)
 
     def test_dialog_text(self):
-        """Функція для простого тестування додавання тексту"""
         self.add_dialog_text("Перший тестовий рядок.")
         self.add_dialog_text("Другий тестовий рядок.")
         self.add_dialog_text("Третій тестовий рядок.")
 
     def add_dialog_text(self, text):
-        """Метод для додавання тексту до вікна діалогу"""
         self.dialog_window.add_text(text)
 
-    # Методи для субтитрів (ЗАМІНИ ЦІ КОМЕНТАРІ СВОЇМ КОДОМ)
     def toggle_subtitle_window(self):
         if self.subtitle_window and self.subtitle_window.isVisible():
             self.subtitle_window.hide()
@@ -383,35 +518,30 @@ class SpellweaverApp(QWidget): # головне вікно
             self.subtitle_window.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
             self.subtitle_window.setAttribute(Qt.WA_TranslucentBackground)
             self.subtitle_window.setStyleSheet("background-color: rgba(0, 0, 0, 153);")
-            self.subtitle_window.setFixedSize(600, 60)
+            self.subtitle_window.setFixedSize(2000, 120)
 
             screen = QApplication.primaryScreen().geometry()
-            x = (screen.width() - 600) // 2
+            x = (screen.width() - 980) // 2
             y = screen.height() - 160
             self.subtitle_window.move(x, y)
 
             self.subtitle_label = QLabel("", self.subtitle_window)
             self.subtitle_label.setFont(QFont("comicsans", 20))
             self.subtitle_label.setStyleSheet("color: white;")
-            self.subtitle_label.setGeometry(10, 10, 580, 40)
+            self.subtitle_label.setGeometry(10, 10, 1000, 40)
 
         self.subtitle_window.show()
 
         if not self.subtitle_thread_started:
-            threading.Thread(target=self.subtitle_loop, daemon=True).start()
             self.subtitle_thread_started = True
 
     def subtitle_loop(self):
-        while True:
-            time.sleep(3)
-            if self.subtitle_label:
-                self.subtitle_label.setText()
-            time.sleep(3)
-            if self.subtitle_label:
-                self.subtitle_label.setText("І ще один приклад...")
+        pass
+
 
 class SubtitleHandler(QObject):
     new_text = pyqtSignal(str)
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
