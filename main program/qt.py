@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QFont, QCloseEvent
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
+from PyQt5.QtCore import QTimer
 import os
 
 # Словник для зіставлення назв мов у GUI до їх кодів (ArgoTranslate)

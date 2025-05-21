@@ -145,20 +145,12 @@ def start_translation(stop_event, from_lang="en", to_lang="uk", callback=None):
                     print(f"\n{from_code.upper()}: {recognized_text}")
                     print(f"{to_code.upper()}: {translated_text}\n")
 
-                    if callback:
-                        callback(translated_text) # ВИКЛИК `callback` ТІЛЬКИ ДЛЯ ПОВНИХ РЕЗУЛЬТАТІВ
-
-                    with open(f"output/{from_code}_output.txt", "a", encoding="utf-8") as f:
-                        f.write(f"{recognized_text}\n")
-
-                    with open(f"output/{to_code}_output.txt", "a", encoding="utf-8") as f:
-                        f.write(f"{translated_text}\n")
-
             else:
                 partial_text = json.loads(rec.PartialResult())["partial"]
                 if partial_text:
-                    partial_translate = argostranslate.translate.translate(partial_text, from_code, to_code)
-                    sys.stdout.write('\r' + partial_translate + ' ' * 20)
+                    if callback:
+                        callback(partial_text)
+                    sys.stdout.write('\r' + partial_text + ' ' * 20)
                     sys.stdout.flush()
 
     except KeyboardInterrupt:
