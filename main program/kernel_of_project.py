@@ -1,6 +1,3 @@
-# kernel_of_project.py
-# (Оновлена логіка надсилання даних: по одному слову для субтитрів)
-
 import argparse
 import queue
 import sys
