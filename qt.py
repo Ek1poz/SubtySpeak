@@ -1,14 +1,12 @@
 import sys
 from kernel_of_project import start_translation
-import kernel_of_project
-import time
 import threading
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QListWidget, QListWidgetItem, QLabel, QPushButton, QComboBox, QVBoxLayout,
-    QTextEdit, QCheckBox, QMessageBox, QInputDialog
+    QTextEdit, QMessageBox, QInputDialog
 )
 from PyQt5.QtGui import QFont, QCloseEvent, QFontMetrics
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, QTimer
+from PyQt5.QtCore import Qt, pyqtSignal, QObject
 import os
 
 # Dictionary to map GUI language names to their codes (ArgoTranslate)
