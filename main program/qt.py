@@ -396,7 +396,7 @@ class SpellweaverApp(QWidget):
     def init_ui(self):
         self.setWindowTitle("Spellweaver")
         self.setFixedSize(520, 651)
-        self.setStyleSheet("background-color: #0C1821;")
+        self.setStyleSheet("background-color: #212124;")
 
         self.STARTbutton = QPushButton("▶", self)
         self.STARTbutton.setGeometry(10, 560, 500, 80)
