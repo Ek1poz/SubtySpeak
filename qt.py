@@ -14,7 +14,8 @@ LANGUAGE_CODES = {
     'English': 'en',
     'Українськa': 'uk',
     'Polska': 'pl',
-    'Espanol': 'es',
+    "Español": "es",
+    "Português": "pt",
     '中国人': 'zh'
 }
 
@@ -288,16 +289,6 @@ class SpellweaverApp(QWidget):
             if not self.current_from_code or not self.current_to_code:
                 QMessageBox.warning(self, "Language selection error", "Please select a valid language for translation..")
                 return
-
-            # Check if "from_lang" is English for correct subtitle output.
-            if self.current_from_code != 'en':
-                reply = QMessageBox.question(self, 'Warning',
-                                             f"Selected source language ('{selected_from_lang_name}') is not English. "
-                                             "On-screen subtitles are designed to display ENGLISH text.. "
-                                             "Continue?",
-                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-                if reply == QMessageBox.No:
-                    return
 
             print(f"Selected translation from '{self.current_from_code}' to '{self.current_to_code}'")
 
