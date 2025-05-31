@@ -25,9 +25,10 @@ def wrap_text(text, width=80):
 
 # Змінюємо сигнатуру функції start_translation
 # callback тепер прийматиме кортеж:
-# ('subtitle_word', new_word_text) для поступового виводу слів в субтитрах
-# ('subtitle_clear_all',) для повного очищення субтитрів після речення
-# ('dialog_entry', original_text, translated_text) для вікна діалогів
+# ('subtitle_word', new_word_text, None) для поступового виводу слів в субтитрах
+# ('subtitle_clear_all', None, None) для повного очищення субтитрів після речення
+# ('dialog_original_word', original_word, None) для поступового виводу оригінальних слів в вікні діалогу
+# ('dialog_full_entry', full_original_text, translated_text) для виводу повного речення та перекладу в вікні діалогу
 def start_translation(stop_event, from_lang="en", to_lang="uk", callback=None):
     warnings.filterwarnings("ignore", category=SoundcardRuntimeWarning)
 
@@ -118,7 +119,8 @@ def start_translation(stop_event, from_lang="en", to_lang="uk", callback=None):
 
     threading.Thread(target=loopback_stream, daemon=True).start()
 
-    last_partial_words = []  # Щоб відслідковувати, які слова вже були надіслані
+    last_partial_words_subtitle = [] # For subtitle display
+    last_partial_words_dialog = []   # For gradual dialog history original text display
 
     try:
         while not stop_event.is_set():
@@ -131,19 +133,20 @@ def start_translation(stop_event, from_lang="en", to_lang="uk", callback=None):
                 result_json = json.loads(rec.Result())
                 recognized_text = result_json.get("text", "").strip()
                 if recognized_text:
-                    punctuated = model_p.restore_punctuation(recognized_text)
-                    translated_text = argostranslate.translate.translate(punctuated, from_code, to_code)
+                    punctuated_original = model_p.restore_punctuation(recognized_text)
+                    translated_text = argostranslate.translate.translate(punctuated_original, from_code, to_code)
 
-                    print(f"\n🎙 {from_code.upper()}:\n{wrap_text(punctuated)}")
+                    print(f"\n🎙 {from_code.upper()}:\n{wrap_text(punctuated_original)}")
                     print(f"🌐 {to_code.upper()}:\n{wrap_text(translated_text)}\n")
 
                     if callback:
-                        # 1. Надсилаємо команду на повне очищення субтитрів (щоб розпочати новий рядок)
+                        # 1. Clear subtitles to start a new line
                         callback("subtitle_clear_all", None, None)
-                        # 2. Надсилаємо повний оригінальний текст для історії діалогів
-                        callback("dialog_entry", punctuated, translated_text)
+                        # 2. Send the full original and translated text for the main dialog history
+                        callback("dialog_full_entry", punctuated_original, translated_text)
 
-                    last_partial_words = []  # Скидаємо буфер слів після повного речення
+                    last_partial_words_subtitle = []  # Reset subtitle word buffer
+                    last_partial_words_dialog = []    # Reset dialog word buffer
 
             else:
                 partial_text = json.loads(rec.PartialResult())["partial"]
@@ -151,21 +154,27 @@ def start_translation(stop_event, from_lang="en", to_lang="uk", callback=None):
                 if partial_text.strip():
                     current_words = partial_text.strip().split()
 
-                    # Знаходимо нові слова, яких ще не було в last_partial_words
-                    new_words_to_send = []
+                    # --- For Subtitles (word-by-word) ---
+                    new_words_to_send_subtitle = []
                     for i in range(len(current_words)):
-                        if i >= len(last_partial_words) or current_words[i] != last_partial_words[i]:
-                            new_words_to_send.append(current_words[i])
+                        if i >= len(last_partial_words_subtitle) or current_words[i] != last_partial_words_subtitle[i]:
+                            new_words_to_send_subtitle.append(current_words[i])
 
-                    # Надсилаємо кожне нове слово окремо для субтитрів
                     if callback:
-                        for word in new_words_to_send:
+                        for word in new_words_to_send_subtitle:
                             callback("subtitle_word", word, None)
-                            # time.sleep(0.01) # Можливо, невелика затримка для плавного виведення
-                            # Важливо: цю затримку краще контролювати в qt.py через QTimer,
-                            # щоб не блокувати потік розпізнавання.
+                    last_partial_words_subtitle = current_words # Update buffer for next iteration
 
-                    last_partial_words = current_words  # Оновлюємо список останніх слів
+                    # --- For Dialog History Original Text (gradual word-by-word) ---
+                    new_words_to_send_dialog = []
+                    for i in range(len(current_words)):
+                        if i >= len(last_partial_words_dialog) or current_words[i] != last_partial_words_dialog[i]:
+                            new_words_to_send_dialog.append(current_words[i])
+
+                    if callback:
+                        for word in new_words_to_send_dialog:
+                            callback("dialog_original_word", word, None)
+                    last_partial_words_dialog = current_words # Update buffer for next iteration
 
     except KeyboardInterrupt:
         print("\n✅ Завершено! Текст збережено в папці output.")

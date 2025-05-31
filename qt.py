@@ -1,5 +1,5 @@
 import sys
-from kernel_of_project import start_translation
+from kernel_of_project import start_translation # Make sure kernel_of_project.py is in the same directory or accessible via PYTHONPATH
 import threading
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QListWidget, QListWidgetItem, QLabel, QPushButton, QComboBox, QVBoxLayout,
@@ -27,22 +27,37 @@ class DialogWindow(QWidget):
         self.setFixedWidth(600)
         self.setStyleSheet("background-color: #1C1A1B;")
 
+        # --- New: QLabel for displaying current original text word-by-word ---
+        self.current_original_label = QLabel("", self)
+        self.current_original_label.setStyleSheet("color: #D8C99B; background-color: #1C1A1B; padding: 5px;")
+        font_current_original = QFont()
+        font_current_original.setPointSize(12)
+        font_current_original.setItalic(True) # Optional: make it italic to distinguish
+        self.current_original_label.setFont(font_current_original)
+        self.current_original_label.setWordWrap(True) # Allow text to wrap
+
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
         self.text_edit.setStyleSheet("background-color: #D8C99B; color: black;")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
 
-        font = QFont()
-        font.setPointSize(12)
-        self.text_edit.setFont(font)
+        font_text_edit = QFont()
+        font_text_edit.setPointSize(12)
+        self.text_edit.setFont(font_text_edit)
 
         layout = QVBoxLayout()
+        layout.addWidget(self.current_original_label) # Add the new label to the layout
         layout.addWidget(self.text_edit)
         self.setLayout(layout)
 
         self._load_text_from_file()
 
+    def update_current_original_display(self, text):
+        """Updates the QLabel displaying the current original sentence word-by-word."""
+        self.current_original_label.setText(text)
+
     def add_text(self, text):
+        """Appends complete dialog entries to the main QTextEdit."""
         self.text_edit.append(text)
         self.text_edit.verticalScrollBar().setValue(self.text_edit.verticalScrollBar().maximum())
 
@@ -187,18 +202,23 @@ class RecordingsWindow(QWidget):
 
 
 class SubtitleHandler(QObject):
-    # Signal now passes three arguments: (type, text_data, translated_text_or_None)
-    data_signal = pyqtSignal(str, str, object)  # object for translated_text_or_None
+    # Signal passes: (data_type, text_data, translated_text_or_None)
+    # data_type can be: 'subtitle_word', 'subtitle_clear_all', 'dialog_original_word', 'dialog_full_entry'
+    data_signal = pyqtSignal(str, str, object)
 
 
 class SpellweaverApp(QWidget):
     def process_incoming_data(self, data_type, text_data, translated_text):
         """
         Processes incoming data from kernel_of_project.
-        data_type: 'subtitle_word', 'subtitle_clear_all', 'dialog_entry'
-        text_data: word for subtitles or original text for dialog
-        translated_text: translated text (if data_type == 'dialog_entry'), otherwise None
+        data_type: 'subtitle_word', 'subtitle_clear_all', 'dialog_original_word', 'dialog_full_entry'
+        text_data: word for subtitles or original text for dialog_original_word, full original for dialog_full_entry
+        translated_text: translated text (if data_type == 'dialog_full_entry'), otherwise None
         """
+        # Buffer to build the current original sentence for the dialog history temporary display
+        if not hasattr(self, '_current_original_dialog_buffer'):
+            self._current_original_dialog_buffer = ""
+
         if data_type == "subtitle_word":
             if self.subtitle_window and self.subtitle_label and self.subtitle_window.isVisible():
                 current_text = self.subtitle_label.text()
@@ -217,32 +237,40 @@ class SpellweaverApp(QWidget):
                 else:
                     # If it doesn't fit, clear and start a new line
                     self.subtitle_label.setText(text_data)
-                    # Potentially, here you would reset the buffer in qt.py if it exists.
-                    # But since we're getting words from kernel_of_project, qt.py just displays.
-                    # The "reset" buffer logic for a new subtitle line should be in kernel_of_project.
-                    # However, if kernel_of_project sends a full sentence, it sends clear_all,
-                    # which will also lead to clearing and a new line.
 
         elif data_type == "subtitle_clear_all":
             self.clear_subtitle_text()
-            # Optional: if you want the full sentence to momentarily appear
-            # after all words and before clearing, you could do this:
-            # self.subtitle_label.setText(text_data) # text_data here would be the full sentence from AcceptWaveform
-            # QTimer.singleShot(self.subtitle_display_duration, self.clear_subtitle_text)
 
-        elif data_type == "dialog_entry":
-            # Format and add to dialog history
-            dialog_entry = ""
-            if translated_text:
-                dialog_entry = f"{self.current_from_code.upper()}: {text_data}\n{self.current_to_code.upper()}: {translated_text}\n"
-                self.current_session_original_text += f"{text_data}\n" # Store original
-                self.current_session_translated_text += f"{translated_text}\n" # Store translated
+        elif data_type == "dialog_original_word":
+            # Append word to the buffer for gradual display in the dialog history's temporary label
+            if self._current_original_dialog_buffer:
+                self._current_original_dialog_buffer += " " + text_data
             else:
-                dialog_entry = f"{self.current_from_code.upper()}: {text_data}\n"  # In case translation didn't arrive
-                self.current_session_original_text += f"{text_data}\n" # Store original even if no translation
+                # Start with language code for the first word
+                self._current_original_dialog_buffer = f"{self.current_from_code.upper()}: {text_data}"
+            self.dialog_window.update_current_original_display(self._current_original_dialog_buffer)
+
+        elif data_type == "dialog_full_entry":
+            # This signal carries the complete original and translated sentences.
+            full_original_text = text_data
+            full_translated_text = translated_text
+
+            dialog_entry = ""
+            if full_translated_text:
+                dialog_entry = f"{self.current_from_code.upper()}: {full_original_text}\n{self.current_to_code.upper()}: {full_translated_text}\n"
+                self.current_session_original_text += f"{full_original_text}\n"
+                self.current_session_translated_text += f"{full_translated_text}\n"
+            else:
+                # Fallback if translation didn't arrive, still store original
+                dialog_entry = f"{self.current_from_code.upper()}: {full_original_text}\n"
+                self.current_session_original_text += f"{full_original_text}\n"
 
             if dialog_entry:
                 self.add_dialog_text(dialog_entry)
+
+            # Clear the temporary buffer and label after adding the full entry to the main history
+            self._current_original_dialog_buffer = ""
+            self.dialog_window.update_current_original_display("")
 
     def clear_subtitle_text(self):
         """Clears the text in the subtitles."""
@@ -276,10 +304,13 @@ class SpellweaverApp(QWidget):
             self.current_session_original_text = ""  # Clear for new session
             self.current_session_translated_text = "" # Clear for new session
             self.clear_subtitle_text()
-            self.dialog_window.text_edit.clear()
+            self.dialog_window.text_edit.clear() # Clear main dialog history
+            self.dialog_window.update_current_original_display("") # Clear temporary original text display
 
             self.stop_event.clear()
-            # Callback now passes 3 arguments: (type, text_data, translated_text_or_None)
+            # Callback now expects data_type, text_data, translated_text_or_None.
+            # kernel_of_project must emit the new types for dialog history:
+            # "dialog_original_word" (word, None) and "dialog_full_entry" (full_original, full_translated)
             callback_func = lambda dtype, txt, tr_txt: self.subtitle_handler.data_signal.emit(dtype, txt, tr_txt)
 
             self.translation_thread = threading.Thread(
@@ -298,6 +329,7 @@ class SpellweaverApp(QWidget):
             self.translating = False
             self.save_session_translation()
             self.clear_subtitle_text()
+            self.dialog_window.update_current_original_display("") # Clear temporary original text display on stop
 
     def __init__(self):
         super().__init__()
