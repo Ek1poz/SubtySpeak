@@ -24,7 +24,7 @@ class DialogWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Dialog history")
-        self.setGeometry(200, 200, 600, 303)
+        self.setGeometry(200, 200, 600, 450)
         self.setFixedWidth(600)
         self.setStyleSheet("background-color: #1C1A1B;")
 
