@@ -59,7 +59,7 @@ def start_translation(stop_event, from_lang="en", to_lang="uk", callback=None):
                     print(f"Пакет {src_code} -> {dest_code} успішно встановлено.")
                 else:
                     print(
-                        f"❌ Пакет для {src_code} -> {dest_code} не знайдено серед доступних. Будь ласка, перевірте коди мов.")
+                        f" Пакет для {src_code} -> {dest_code} не знайдено серед доступних. Будь ласка, перевірте коди мов.")
                     raise ValueError(f"Пакет перекладу для {src_code} -> {dest_code} не знайдено.")
         except Exception as e:
             print(f"Помилка при встановленні пакета {src_code} -> {dest_code}: {e}")
@@ -72,12 +72,12 @@ def start_translation(stop_event, from_lang="en", to_lang="uk", callback=None):
     default_speaker_name = sc.default_speaker().name
     loopback = next((m for m in sc.all_microphones(include_loopback=True)
                      if m.isloopback and default_speaker_name in m.name), None)
-    print("🔍 Мікрофони:")
+    print("Мікрофони:")
     for mic in sc.all_microphones(include_loopback=True):
         print(f"  - {mic.name} (loopback: {mic.isloopback})")
 
     if not loopback:
-        raise RuntimeError("❌ Loopback-пристрій не знайдено. Перевір, чи є аудіо вихід з динаміків.")
+        raise RuntimeError(" Loopback-пристрій не знайдено. Перевір, чи є аудіо вихід з динаміків.")
 
     samplerate = 16000
     channels = 1
@@ -110,7 +110,7 @@ def start_translation(stop_event, from_lang="en", to_lang="uk", callback=None):
     os.makedirs("output", exist_ok=True)
 
     def loopback_stream():
-        print("🎧 Слухаю системний звук...")
+        print(" Слухаю системний звук...")
         with loopback.recorder(samplerate=samplerate, channels=channels, blocksize=blocksize) as mic:
             while not stop_event.is_set():
                 data = mic.record(numframes=blocksize)
@@ -136,8 +136,8 @@ def start_translation(stop_event, from_lang="en", to_lang="uk", callback=None):
                     punctuated_original = model_p.restore_punctuation(recognized_text)
                     translated_text = argostranslate.translate.translate(punctuated_original, from_code, to_code)
 
-                    print(f"\n🎙 {from_code.upper()}:\n{wrap_text(punctuated_original)}")
-                    print(f"🌐 {to_code.upper()}:\n{wrap_text(translated_text)}\n")
+                    print(f"\n {from_code.upper()}:\n{wrap_text(punctuated_original)}")
+                    print(f" {to_code.upper()}:\n{wrap_text(translated_text)}\n")
 
                     if callback:
                         # 1. Clear subtitles to start a new line
@@ -177,9 +177,9 @@ def start_translation(stop_event, from_lang="en", to_lang="uk", callback=None):
                     last_partial_words_dialog = current_words # Update buffer for next iteration
 
     except KeyboardInterrupt:
-        print("\n✅ Завершено! Текст збережено в папці output.")
+        print("\n Завершено! Текст збережено в папці output.")
     except Exception as e:
-        print(f"\n❌ Виникла помилка в процесі перекладу: {e}")
+        print(f"\n Виникла помилка в процесі перекладу: {e}")
         stop_event.set()
 
 
